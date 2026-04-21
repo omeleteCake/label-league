@@ -28,7 +28,7 @@ _env_file = _find_env_file()
 if _env_file:
     load_dotenv(_env_file)
 
-SUPABASE_URL = _required_env("NEXT_PUBLIC_SUPABASE_URL")
+NEXT_PUBLIC_SUPABASE_URL = _required_env("NEXT_PUBLIC_SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = _required_env("SUPABASE_SERVICE_ROLE_KEY")
 SPOTIFY_CLIENT_ID = _required_env("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = _required_env("SPOTIFY_CLIENT_SECRET")
