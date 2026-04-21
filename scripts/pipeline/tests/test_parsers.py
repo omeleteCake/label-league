@@ -147,15 +147,6 @@ def _soup(html: str):
     return _make_soup(html)
 
 
-def _fixture_params(fixtures_dir: Path):
-    paths = sorted(fixtures_dir.glob("*.html"))
-
-    if not paths:
-        return [pytest.param(None, marks=pytest.mark.skip(reason="no html fixtures present"))]
-
-    return [pytest.param(path, id=path.name) for path in paths]
-
-
 @pytest.fixture
 def fixture_paths(fixtures_dir: Path) -> list[Path]:
     return sorted(fixtures_dir.glob("*.html"))
