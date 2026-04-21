@@ -40,3 +40,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# claude code local overrides
+.claude/settings.local.json
+
+# python
+.venv/
+__pycache__/
+
+# wsl zone identifiers
+*:Zone.Identifier
