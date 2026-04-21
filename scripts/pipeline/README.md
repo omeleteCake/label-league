@@ -16,7 +16,11 @@ Create `.env.local` at the project root and fill in `NEXT_PUBLIC_SUPABASE_URL`, 
 
 ## Running
 
-No fetching, scraping, or orchestration scripts exist yet. Future scripts should be invoked from the repository root with `python scripts/pipeline/<script>.py` or from this directory with `python <script>.py`.
+- `python fetch_metadata.py` reads `artist_list.json` and upserts artist metadata (name, image, genres) from the Spotify Web API into the `artists` table.
+- `python smoke_spotify_auth.py` prints a Spotify access token; use to verify credentials and the venv work.
+- `parsers/strategies.py` exposes `try_parse(html)` for extracting monthly listener counts from Spotify artist-page HTML (used by the forthcoming scraper). Run `python -m pytest tests/` to verify.
+
+Orchestration (`run_daily.py`) does not yet exist.
 
 ## Why we scrape
 
