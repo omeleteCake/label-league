@@ -148,7 +148,11 @@ def _load_artist_list() -> list[str]:
 
     try:
         data = json.loads(raw)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as error:
+        logger.warning(
+            "artist_list.json is not valid JSON; treating as empty",
+            extra={"event": "artist_list_malformed", "error": str(error)},
+        )
         return []
 
     if not isinstance(data, list):
