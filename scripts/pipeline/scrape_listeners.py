@@ -12,6 +12,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 import requests
+from playwright.sync_api import Error as PlaywrightError
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import sync_playwright
 from tenacity import (
     RetryCallState,
     retry,
@@ -34,6 +37,9 @@ from parsers.strategies import try_parse
 
 SPOTIFY_ARTIST_PAGE_URL = "https://open.spotify.com/artist/{id}"
 REQUEST_TIMEOUT_SECONDS = 15
+BROWSER_PAGE_TIMEOUT_MS = 45_000
+BROWSER_NETWORK_IDLE_TIMEOUT_MS = 15_000
+BROWSER_POST_LOAD_SETTLE_MS = 5_000
 
 logger = get_logger("scrape_listeners")
 
@@ -110,6 +116,95 @@ def _retry_wait(retry_state: RetryCallState) -> float:
 )
 def _fetch_with_retries(spotify_id: str) -> str:
     return _fetch_one(spotify_id)
+
+
+class SpotifyBrowserFetcher:
+    def __init__(self) -> None:
+        self._playwright: Any | None = None
+        self._browser: Any | None = None
+        self._context: Any | None = None
+        self._page: Any | None = None
+
+    def fetch(self, spotify_id: str) -> str:
+        page = self._ensure_page()
+        response = page.goto(
+            SPOTIFY_ARTIST_PAGE_URL.format(id=spotify_id),
+            wait_until="domcontentloaded",
+            timeout=BROWSER_PAGE_TIMEOUT_MS,
+        )
+
+        status_code = response.status if response else None
+
+        if status_code == 404:
+            raise ArtistNotFoundError(spotify_id)
+
+        if status_code == 429:
+            retry_after = (
+                _parse_retry_after(response.headers.get("Retry-After")) if response else None
+            )
+            raise RetryableHTTPError(429, retry_after)
+
+        if status_code is not None and 500 <= status_code < 600:
+            raise RetryableHTTPError(status_code)
+
+        if status_code is not None and status_code >= 400:
+            raise requests.HTTPError(f"Rendered Spotify artist page returned HTTP {status_code}")
+
+        try:
+            page.wait_for_load_state("networkidle", timeout=BROWSER_NETWORK_IDLE_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            pass
+
+        page.wait_for_timeout(BROWSER_POST_LOAD_SETTLE_MS)
+        return page.content()
+
+    def close(self) -> None:
+        for handle_name in ("_context", "_browser"):
+            handle = getattr(self, handle_name)
+
+            if handle is None:
+                continue
+
+            try:
+                handle.close()
+            except PlaywrightError:
+                pass
+
+            setattr(self, handle_name, None)
+
+        if self._playwright is not None:
+            self._playwright.stop()
+            self._playwright = None
+
+        self._page = None
+
+    def _ensure_page(self) -> Any:
+        if self._page is not None:
+            return self._page
+
+        self._playwright = sync_playwright().start()
+        self._browser = self._playwright.chromium.launch(headless=True)
+        self._context = self._browser.new_context(
+            user_agent=USER_AGENT,
+            locale="en-US",
+            extra_http_headers={"Accept-Language": "en-US,en;q=0.9"},
+        )
+        self._page = self._context.new_page()
+
+        return self._page
+
+
+@retry(
+    stop=stop_after_attempt(MAX_RETRIES),
+    wait=_retry_wait,
+    retry=retry_if_exception_type((RetryableHTTPError, PlaywrightTimeoutError)),
+    reraise=True,
+)
+def _fetch_rendered_with_retries(
+    browser_fetcher: SpotifyBrowserFetcher,
+    spotify_id: str,
+) -> str:
+    return browser_fetcher.fetch(spotify_id)
 
 
 def _sleep_between_requests(index: int, total: int) -> None:
@@ -192,6 +287,7 @@ def main(limit: int | None = None) -> int:
     http_errors = 0
     not_found = 0
     strategy_counts: dict[str, int] = {}
+    browser_fetcher: SpotifyBrowserFetcher | None = None
 
     for index, artist in enumerate(artists):
         artist_id = artist["id"]
@@ -269,7 +365,100 @@ def main(limit: int | None = None) -> int:
             _sleep_between_requests(index, attempted)
             continue
 
+        source = "requests"
         parsed = try_parse(html)
+
+        if parsed is None:
+            logger.info(
+                "static Spotify HTML did not include monthly listener count; trying rendered page",
+                extra={
+                    "event": "rendered_fetch_attempt",
+                    "artist_id": artist_id,
+                    "spotify_id": spotify_id,
+                },
+            )
+
+            if browser_fetcher is None:
+                browser_fetcher = SpotifyBrowserFetcher()
+
+            try:
+                html = _fetch_rendered_with_retries(browser_fetcher, spotify_id)
+            except ArtistNotFoundError:
+                not_found += 1
+                logger.warning(
+                    "artist page not found",
+                    extra={
+                        "event": "artist_not_found",
+                        "artist_id": artist_id,
+                        "spotify_id": spotify_id,
+                        "source": "playwright",
+                    },
+                )
+
+                try:
+                    _mark_artist_inactive(client, artist_id)
+                except Exception as error:  # noqa: BLE001
+                    http_errors += 1
+                    logger.error(
+                        "failed to mark artist inactive",
+                        extra={
+                            "event": "database_error",
+                            "operation": "mark_inactive",
+                            "artist_id": artist_id,
+                            "spotify_id": spotify_id,
+                            "error": str(error),
+                        },
+                    )
+
+                _sleep_between_requests(index, attempted)
+                continue
+            except RetryableHTTPError as error:
+                http_errors += 1
+                logger.error(
+                    "rendered Spotify artist page request failed after retries",
+                    extra={
+                        "event": "http_error",
+                        "artist_id": artist_id,
+                        "spotify_id": spotify_id,
+                        "source": "playwright",
+                        "status_code": error.status_code,
+                    },
+                )
+                _sleep_between_requests(index, attempted)
+                continue
+            except requests.HTTPError as error:
+                http_errors += 1
+                logger.error(
+                    "rendered Spotify artist page request failed",
+                    extra={
+                        "event": "http_error",
+                        "artist_id": artist_id,
+                        "spotify_id": spotify_id,
+                        "source": "playwright",
+                        "error": str(error),
+                    },
+                )
+                _sleep_between_requests(index, attempted)
+                continue
+            except PlaywrightError as error:
+                http_errors += 1
+                logger.error(
+                    "rendered Spotify artist page request failed",
+                    extra={
+                        "event": "http_error",
+                        "artist_id": artist_id,
+                        "spotify_id": spotify_id,
+                        "source": "playwright",
+                        "error": str(error),
+                    },
+                )
+                browser_fetcher.close()
+                browser_fetcher = None
+                _sleep_between_requests(index, attempted)
+                continue
+
+            source = "playwright"
+            parsed = try_parse(html)
 
         if parsed is None:
             parse_failures += 1
@@ -279,6 +468,7 @@ def main(limit: int | None = None) -> int:
                     "event": "parse_failed",
                     "artist_id": artist_id,
                     "spotify_id": spotify_id,
+                    "source": source,
                 },
             )
             _sleep_between_requests(index, attempted)
@@ -299,6 +489,7 @@ def main(limit: int | None = None) -> int:
                     "spotify_id": spotify_id,
                     "listeners": listeners,
                     "strategy": strategy,
+                    "source": source,
                     "error": str(error),
                 },
             )
@@ -315,9 +506,13 @@ def main(limit: int | None = None) -> int:
                 "spotify_id": spotify_id,
                 "listeners": listeners,
                 "strategy": strategy,
+                "source": source,
             },
         )
         _sleep_between_requests(index, attempted)
+
+    if browser_fetcher is not None:
+        browser_fetcher.close()
 
     logger.info(
         "scrape complete",

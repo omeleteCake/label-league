@@ -143,11 +143,16 @@ def parse_inline_json(soup: BeautifulSoup) -> Optional[int]:
     return None
 
 
+def parse_body_text(soup: BeautifulSoup) -> Optional[int]:
+    return _coerce_listener_string(soup.get_text(" ", strip=True))
+
+
 STRATEGIES: list[tuple[str, Callable[[BeautifulSoup], Optional[int]]]] = [
     ("meta_description", parse_meta_description),
     ("next_data", parse_next_data),
     ("json_ld", parse_json_ld),
     ("inline_json", parse_inline_json),
+    ("body_text", parse_body_text),
 ]
 
 

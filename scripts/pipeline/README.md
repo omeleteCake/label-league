@@ -10,6 +10,13 @@ Install the pipeline dependencies from the repository root or from this director
 
 ```bash
 python -m pip install -r scripts/pipeline/requirements.txt
+python -m playwright install chromium
+```
+
+On a fresh Linux/WSL environment, Playwright may also need native browser packages:
+
+```bash
+python -m playwright install-deps chromium
 ```
 
 Create `.env.local` at the project root and fill in `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SPOTIFY_CLIENT_ID`, and `SPOTIFY_CLIENT_SECRET`.
@@ -17,8 +24,9 @@ Create `.env.local` at the project root and fill in `NEXT_PUBLIC_SUPABASE_URL`, 
 ## Running
 
 - `python fetch_metadata.py` reads `artist_list.json` and upserts artist metadata (name, image, genres) from the Spotify Web API into the `artists` table.
+- `python scrape_listeners.py --limit 5` scrapes monthly listener counts for active, non-opted-out artists and inserts listener snapshots.
 - `python smoke_spotify_auth.py` prints a Spotify access token; use to verify credentials and the venv work.
-- `parsers/strategies.py` exposes `try_parse(html)` for extracting monthly listener counts from Spotify artist-page HTML (used by the forthcoming scraper). Run `python -m pytest tests/` to verify.
+- `parsers/strategies.py` exposes `try_parse(html)` for extracting monthly listener counts from Spotify artist-page HTML. Run `python -m pytest tests/` to verify.
 
 Orchestration (`run_daily.py`) does not yet exist.
 

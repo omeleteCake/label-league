@@ -4,6 +4,7 @@ import pytest
 
 from parsers.strategies import (
     STRATEGIES,
+    parse_body_text,
     parse_inline_json,
     parse_json_ld,
     parse_meta_description,
@@ -105,6 +106,19 @@ def test_inline_json_only():
     assert result == (99_999, "inline_json")
 
 
+def test_body_text_only():
+    html = """
+    <html><head></head><body>
+      <main>
+        <h1>Rendered Artist</h1>
+        <span>61,687,158 monthly listeners</span>
+      </main>
+    </body></html>
+    """
+    result = try_parse(html)
+    assert result == (61_687_158, "body_text")
+
+
 def test_inline_json_skips_application_json_type():
     html = """
     <html><head></head><body>
@@ -120,6 +134,7 @@ def test_per_strategy_isolation():
     next_only = '<html><body><script id="__NEXT_DATA__" type="application/json">{"monthlyListeners":2000}</script></body></html>'
     ld_only = '<html><head><script type="application/ld+json">{"monthlyListeners":3000}</script></head></html>'
     inline_only = '<html><body><script>x={"monthlyListeners":4000}</script></body></html>'
+    body_only = "<html><body><span>5,000 monthly listeners</span></body></html>"
 
     assert parse_meta_description(_soup(meta_only)) == 1_000_000
     assert parse_next_data(_soup(meta_only)) is None
@@ -140,6 +155,12 @@ def test_per_strategy_isolation():
     assert parse_meta_description(_soup(inline_only)) is None
     assert parse_next_data(_soup(inline_only)) is None
     assert parse_json_ld(_soup(inline_only)) is None
+
+    assert parse_body_text(_soup(body_only)) == 5_000
+    assert parse_meta_description(_soup(body_only)) is None
+    assert parse_next_data(_soup(body_only)) is None
+    assert parse_json_ld(_soup(body_only)) is None
+    assert parse_inline_json(_soup(body_only)) is None
 
 
 def _soup(html: str):
