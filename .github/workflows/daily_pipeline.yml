@@ -1,0 +1,41 @@
+name: Daily Pipeline
+
+on:
+  schedule:
+    # Runs daily at 08:00 UTC, approximately 04:00 ET during daylight time.
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+jobs:
+  ingest:
+    name: ingest
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: scripts/pipeline/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r scripts/pipeline/requirements.txt
+          python -m playwright install --with-deps chromium
+
+      # Failure means either the Spotify scraper broke or the pipeline error rate exceeded
+      # the configured threshold. To investigate, open the Actions tab, expand the failed
+      # run, and inspect the structured JSON logs.
+      - name: Run daily pipeline
+        timeout-minutes: 30
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
+          SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
+        run: python scripts/pipeline/run_daily.py
