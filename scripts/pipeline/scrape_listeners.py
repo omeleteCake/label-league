@@ -215,19 +215,14 @@ def _sleep_between_requests(index: int, total: int) -> None:
     time.sleep(max(0.0, delay))
 
 
-def _load_active_artists(client: Any, limit: int | None) -> list[dict[str, str]]:
-    response = (
-        client.table("artists")
-        .select("id, spotify_id")
-        .eq("is_active", True)
-        .eq("opted_out", False)
-        .execute()
-    )
-
-    data = response.data
-
+def _filter_artist_rows(
+    data: Any,
+    spotify_ids: list[str] | None,
+) -> list[dict[str, str]]:
     if not isinstance(data, list):
         raise RuntimeError("Supabase artists query returned non-list data")
+
+    order = {spotify_id: index for index, spotify_id in enumerate(spotify_ids or [])}
 
     artists: list[dict[str, str]] = []
 
@@ -240,6 +235,30 @@ def _load_active_artists(client: Any, limit: int | None) -> list[dict[str, str]]
 
         if isinstance(artist_id, str) and isinstance(spotify_id, str):
             artists.append({"id": artist_id, "spotify_id": spotify_id})
+
+    if spotify_ids is not None:
+        artists.sort(key=lambda artist: order.get(artist["spotify_id"], len(order)))
+
+    return artists
+
+
+def _load_active_artists(
+    client: Any,
+    limit: int | None,
+    spotify_ids: list[str] | None = None,
+) -> list[dict[str, str]]:
+    query = (
+        client.table("artists")
+        .select("id, spotify_id")
+        .eq("is_active", True)
+        .eq("opted_out", False)
+    )
+
+    if spotify_ids:
+        query = query.in_("spotify_id", spotify_ids)
+
+    response = query.execute()
+    artists = _filter_artist_rows(response.data, spotify_ids)
 
     return artists[:limit] if limit is not None else artists
 
@@ -269,11 +288,11 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main(limit: int | None = None) -> int:
+def main(limit: int | None = None, spotify_ids: list[str] | None = None) -> int:
     client = get_admin_client()
 
     try:
-        artists = _load_active_artists(client, limit)
+        artists = _load_active_artists(client, limit, spotify_ids)
     except Exception as error:  # noqa: BLE001
         logger.error(
             "failed to load active artists",
