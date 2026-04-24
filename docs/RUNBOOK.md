@@ -11,7 +11,7 @@ cp .env.local.example .env.local
 pnpm dev
 ```
 
-Fill `.env.local` with the production env var names from `.env.local.example`. Do not add `SUPABASE_URL`.
+Fill `.env.local` with the production env var names from `.env.local.example`.
 
 ## Frontend Checks
 

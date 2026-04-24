@@ -27,7 +27,7 @@ The dependency installer may need sudo on Linux/WSL. Required env vars live in t
 - `SPOTIFY_CLIENT_ID`
 - `SPOTIFY_CLIENT_SECRET`
 
-Never use `SUPABASE_URL`.
+Use `NEXT_PUBLIC_SUPABASE_URL` everywhere a Supabase project URL is needed.
 
 ## Scripts
 

@@ -54,7 +54,7 @@ Use these names exactly:
 - `SPOTIFY_CLIENT_ID`
 - `SPOTIFY_CLIENT_SECRET`
 
-Never introduce `SUPABASE_URL` anywhere in this codebase. The production Supabase URL env var name is `NEXT_PUBLIC_SUPABASE_URL`, including for trusted scripts.
+Use `NEXT_PUBLIC_SUPABASE_URL` everywhere a Supabase project URL is needed, including trusted scripts.
 
 ## Safety Rules
 
