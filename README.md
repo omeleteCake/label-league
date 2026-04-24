@@ -24,4 +24,10 @@ Label League is a 90-day prediction league over Spotify monthly listener growth,
 3. Fill in the required values in `.env.local`.
 4. Run `pnpm install`.
 5. Run `pnpm dev`.
-6. Run the pipeline: `cd scripts/pipeline && pip install -r requirements.txt && python fetch_metadata.py`
+6. Run the pipeline: `cd scripts/pipeline && python -m pip install -r requirements.txt && python fetch_metadata.py`
+
+## Developer docs
+
+- `AGENTS.md` — repo guide for AI coding agents and contributors.
+- `docs/PROJECT_CONTEXT.md` — product and domain context.
+- `docs/RUNBOOK.md` — local commands, checks, and operational notes.

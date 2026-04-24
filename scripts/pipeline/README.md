@@ -25,10 +25,9 @@ Create `.env.local` at the project root and fill in `NEXT_PUBLIC_SUPABASE_URL`, 
 
 - `python fetch_metadata.py` reads `artist_list.json` and upserts artist metadata (name, image, genres) from the Spotify Web API into the `artists` table.
 - `python scrape_listeners.py --limit 5` scrapes monthly listener counts for active, non-opted-out artists and inserts listener snapshots.
+- `python run_daily.py` runs `fetch_metadata.py` then `scrape_listeners.py` in sequence, logs a `daily_pipeline_complete` summary, and exits 0 only if both sub-scripts succeeded.
 - `python smoke_spotify_auth.py` prints a Spotify access token; use to verify credentials and the venv work.
 - `parsers/strategies.py` exposes `try_parse(html)` for extracting monthly listener counts from Spotify artist-page HTML. Run `python -m pytest tests/` to verify.
-
-Orchestration (`run_daily.py`) does not yet exist.
 
 ## Why we scrape
 
